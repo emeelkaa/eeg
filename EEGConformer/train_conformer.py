@@ -21,7 +21,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Hyperparameters
 BATCH_SIZE = 16
 EPOCHS = 25
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.0005
 PATIENCE = 5  # For early stopping
 TRAIN_RATIO = 0.7  # (70/15/15)
 VAL_RATIO = 0.15    
@@ -60,7 +60,7 @@ def plot_confusion_matrix(y_true, y_pred):
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
     plt.tight_layout()
-    plt.savefig('cm.png')
+    plt.savefig('cm_conformer.png')
     plt.close()
 
     # Calculate and log metrics
