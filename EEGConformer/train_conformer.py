@@ -6,11 +6,11 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 import logging
 from dataset import CHBMITDataset
-from EEG_Conformer import Conformer
+from EEGConformer import Conformer
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,7 +20,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Hyperparameters
 BATCH_SIZE = 16
-EPOCHS = 30
+EPOCHS = 25
 LEARNING_RATE = 0.001
 PATIENCE = 5  # For early stopping
 TRAIN_RATIO = 0.7  # (70/15/15)
@@ -44,33 +44,32 @@ test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, pin
 
 # Model, loss, optimizer
 model = Conformer().to(device)
-criterion = nn.CrossEntropyLoss()
+criterion = nn.BCEWithLogitsLoss()
 optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=2, factor=0.5, verbose=True)
 
-def plot_confusion_matrix(y_true, y_pred, classes=None):
+def plot_confusion_matrix(y_true, y_pred):
     cm = confusion_matrix(y_true, y_pred)
-    if classes is None:
-        classes = [f"Class {i}" for i in range(cm.shape[0])]
+    class_names = ['Normal', 'Seizure']
     
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=classes,
-                yticklabels=classes)
+                xticklabels=class_names,
+                yticklabels=class_names)
     plt.title('Confusion Matrix')
     plt.ylabel('True Label')
     plt.xlabel('Predicted Label')
     plt.tight_layout()
-    plt.savefig('confusion_matrix.png')
+    plt.savefig('cm.png')
     plt.close()
 
     # Calculate and log metrics
-    precision = np.diag(cm) / np.sum(cm, axis=0)
-    recall = np.diag(cm) / np.sum(cm, axis=1)
-    f1 = 2 * (precision * recall) / (precision + recall)
+    precision = precision_score(y_true, y_pred)
+    recall = recall_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred)
     
-    for i, class_name in enumerate(classes):
-        logging.info(f"{class_name} - Precision: {precision[i]:.3f}, Recall: {recall[i]:.3f}, F1: {f1[i]:.3f}")
+    logging.info(f"Precision: {precision:.3f}, Recall: {recall:.3f}, F1: {f1:.3f}")
+
 
 def train_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
@@ -79,17 +78,18 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     total = 0
 
     for inputs, labels in tqdm(dataloader, desc="Training"):
-        inputs, labels = inputs.to(device, non_blocking=True).float(), labels.to(device, non_blocking=True).long()
-
+        inputs = inputs.to(device, non_blocking=True).float()
+        labels = labels.to(device, non_blocking=True).float().unsqueeze(1)
+        
         optimizer.zero_grad(set_to_none=True)
         
-        _, outputs = model(inputs)
+        outputs = model(inputs)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
 
         epoch_loss += loss.item()
-        _, predicted = outputs.max(1)
+        predicted = (torch.sigmoid(outputs) > 0.5).float()
         correct += (predicted == labels).sum().item()
         total += labels.size(0)
 
@@ -107,14 +107,15 @@ def validate_epoch(model, dataloader, criterion, device, get_predictions=False):
 
     with torch.no_grad():
         for inputs, labels in tqdm(dataloader, desc="Validation"):
-            inputs, labels = inputs.to(device, non_blocking=True).float(), labels.to(device, non_blocking=True).long()
-
-            _, outputs = model(inputs)
+            inputs = inputs.to(device, non_blocking=True).float()
+            labels = labels.to(device, non_blocking=True).float().unsqueeze(1)
+            
+            outputs = model(inputs)
 
             loss = criterion(outputs, labels)
 
             epoch_loss += loss.item()
-            _, predicted = outputs.max(1)
+            predicted = (torch.sigmoid(outputs) > 0.5).float()
             correct += (predicted == labels).sum().item()
             total += labels.size(0)
 
@@ -149,7 +150,7 @@ for epoch in range(EPOCHS):
     if val_loss < best_loss:
         best_loss = val_loss
         early_stop_counter = 0
-        torch.save(model.state_dict(), "best_eeg_conformer.pth")
+        torch.save(model.state_dict(), "best_conformer.pth")
         logging.info(f"New best model saved with val loss: {best_loss:.4f}")
     else:
         early_stop_counter += 1
@@ -158,16 +159,12 @@ for epoch in range(EPOCHS):
             break
 
 # Test the model on the test set and generate confusion matrix
-model.load_state_dict(torch.load("best_eeg_conformer.pth"))
+model.load_state_dict(torch.load("best_conformer.pth"))
 test_loss, test_acc, test_preds, test_labels = validate_epoch(model, test_loader, criterion, device, get_predictions=True)
 logging.info(f"Test Loss = {test_loss:.4f}, Test Accuracy = {test_acc:.2f}%")
 
-# Get the number of classes from your dataset
-num_classes = len(set(test_labels))
-class_names = [f"Class {i}" for i in range(num_classes)]  # Replace with actual class names if available
-
 # Plot and save confusion matrix
-plot_confusion_matrix(test_labels, test_preds, classes=class_names)
-logging.info("Confusion matrix saved as 'confusion_matrix.png'")
+plot_confusion_matrix(test_labels, test_preds)
+logging.info("Confusion matrix was saved")
 
 logging.info("Training and testing complete. Best model saved.")

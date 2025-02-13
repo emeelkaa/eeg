@@ -15,10 +15,10 @@ logging.basicConfig(
 
 # Define dataset directories
 ROOT_DIR = "stage1_dataset"
-NEW_ROOT_DIR = os.path.join("stage2_dataset_v2_4sec", "normals")
+NEW_ROOT_DIR = os.path.join("stage2_dataset_v2_10sec", "normals")
 RECORDS_WITHOUT_SEIZURES = "RECORDS_WITHOUT_SEIZURES"
 
-WINDOW_SIZE = 4
+WINDOW_SIZE = 10
 SAMPLING_RATE = 256 
 
 current_subject_id = None
@@ -27,7 +27,7 @@ def get_durations_freq():
     """
     Retrieve seizure segment durations from metadata from KDE modeling
     """
-    root_dir = os.path.join('stage2_dataset_v2','seizures')
+    root_dir = os.path.join('stage2_dataset_v2_10sec','seizures')
     df = pd.read_csv(os.path.join(root_dir, "metadata.csv"))
     seizure_durations = df["segment_end"] - df["segment_start"]
     return seizure_durations.values.reshape(-1, 1)
@@ -36,7 +36,7 @@ def get_subjects_freq():
     """
     Get subjects' seizure occurrence frequencies for weighted sampling
     """
-    root_dir = os.path.join('stage2_dataset_v2','seizures')
+    root_dir = os.path.join('stage2_dataset_v2_10sec','seizures')
     df = pd.read_csv(os.path.join(root_dir, 'metadata.csv'))
     temp = df.groupby(df['subject_id']).count()
     seizure_counts = temp['file'].values
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     else:
         counter = 0
         while os.path.exists(NEW_ROOT_DIR):
-            NEW_ROOT_DIR = os.path.join("stage2_dataset_v2", f"normals{counter}")
+            NEW_ROOT_DIR = os.path.join("stage2_dataset_v2_10sec", f"normals{counter}")
             counter += 1
 
     kde_durations = KernelDensity(bandwidth=29.6150, kernel='gaussian')

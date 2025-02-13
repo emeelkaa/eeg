@@ -28,15 +28,19 @@ class PatchEmbedding(nn.Module):
                                                             # out_shape: [batch_size, num_patches, embedding_dim]
         )
 
+        self.positions = nn.Parameter(torch.randn(1, 165, emb_size))
+
     def forward(self, x: Tensor) -> Tensor:
         b, _, _, _ = x.shape    # inp_shape: [batch_size, 1, channels, time]
         x = self.shallownet(x)  
         x = self.projection(x)
+        x += self.positions
         return x
     
 class MultiHeadAttention(nn.Module):
     def __init__(self, emb_size, num_heads, dropout):
         super().__init__()
+        assert emb_size % num_heads == 0   # emb_size must be divisible by num_heads
         self.emb_size = emb_size
         self.num_heads = num_heads
         self.keys = nn.Linear(emb_size, emb_size)
@@ -117,7 +121,16 @@ class TransformerEncoder(nn.Sequential):
 class ClassificationHead(nn.Sequential):
     def __init__(self, emb_size, n_classes):
         super().__init__()
-        
+        self.pool = Reduce('b n e -> b e', reduction='mean')
+        self.norm = nn.LayerNorm(emb_size)
+        self.fc = nn.Linear(emb_size, n_classes)
+    
+    def forward(self, x):
+        features = self.pool(x)
+        features = self.norm(features)
+        return features, self.fc(features)
+    
+    '''
         # global average pooling
         self.clshead = nn.Sequential(
             Reduce('b n e -> b e', reduction='mean'),
@@ -133,14 +146,12 @@ class ClassificationHead(nn.Sequential):
             nn.Dropout(0.3),
             nn.Linear(32, n_classes)
         )
-
-        self.fc_adaptive = None
-
+       
     def forward(self, x):
         x = x.contiguous().view(x.size(0), -1)
         out = self.fc(x)
         return x, out
-    
+     '''
 class Conformer(nn.Sequential):
     def __init__(self, emb_size=40, depth=6, n_classes=2, **kwargs):
         super().__init__(
@@ -149,15 +160,14 @@ class Conformer(nn.Sequential):
             ClassificationHead(emb_size, n_classes)
         )
 
-'''
+
 model = Conformer(emb_size=40, depth=5, n_classes=2)
 model.eval()
 
-sample_input = torch.randn(1, 1, 18, 1024)
+sample_input = torch.randn(1, 1, 18, 2560)
 
 with torch.no_grad():
     feature_output, class_output = model(sample_input)
 
 print(f"Feature Output Shape: {feature_output.shape}")  # Shape of extracted features
 print(f"Class Output Shape: {class_output.shape}")      # Shape of classification output
-'''

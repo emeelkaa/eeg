@@ -14,10 +14,10 @@ logging.basicConfig(
 
 # Define dataset directories
 ROOT_DIR = "stage1_dataset"
-NEW_ROOT_DIR = os.path.join("stage2_dataset_v2_4sec", "seizures")
+NEW_ROOT_DIR = os.path.join("stage2_dataset_v2_10sec", "seizures")
 RECORDS_WITH_SEIZURES = "RECORDS_WITH_SEIZURES"
 
-WINDOW_SIZE = 4
+WINDOW_SIZE = 10
 SAMPLING_RATE = 256 
 
 current_subject_id = None
