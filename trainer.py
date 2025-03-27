@@ -236,7 +236,7 @@ if __name__ == "__main__":
         save_dir="./results/bci/"
     )
     
-    #trainer.train(epochs=100, patience=7)
+    trainer.train(epochs=100, patience=7)
     
     # Test the model
     trainer.test(model_path=os.path.join(trainer.save_dir, 'best_model.pth'))
