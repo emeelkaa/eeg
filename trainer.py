@@ -19,7 +19,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 
 class Trainer:
     def __init__(self, model, train_dataset, val_dataset, test_dataset, 
-                 num_classes=2, batch_size=16, learning_rate=1e-3, 
+                 num_classes=2, batch_size=16, learning_rate=5e-4, 
                  weight_decay=1e-4, device=None, save_dir="./results"):
         
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -153,13 +153,12 @@ class Trainer:
                     logging.info(f"New best model saved to {model_path}")
                 except Exception as e:
                     logging.error(f"Failed to save model: {e}")
+                    
             else:
-                '''
                 patience_counter += 1
                 if patience_counter >= patience:
                     logging.info("Early stopping triggered.")
-                    break'''
-                pass
+                    break
 
     def test(self, model_path=None):
         model_path = model_path or os.path.join(self.save_dir, "best_model.pth")
@@ -212,30 +211,35 @@ class Trainer:
 if __name__ == "__main__":
     from model import Conformer
     from dataset import BCI2aDataset
-
-    dataset = BCI2aDataset("../BCICIV_2a/stage1/")
+    
     model = Conformer()
 
-    labels = dataset.labels.numpy()
+    train_dataset = BCI2aDataset("../BCICIV_2a/stage1_eog/", mode='train')
+    eval_dataset = BCI2aDataset("../BCICIV_2a/stage1_eog/", mode='eval')
 
-    train_size = int(0.6 * len(dataset))
-    val_size = int(0.2 * len(dataset))
-    test_size = len(dataset) - train_size - val_size
+    # Create model
+    model = Conformer()
 
-    train_dataset, val_dataset, test_dataset = random_split(dataset, [train_size, val_size, test_size])
+    # If you want to split the training data further
+    train_size = int(0.9 * len(train_dataset))
+    val_size = len(train_dataset) - train_size
+
+    train_subset, val_subset = random_split(train_dataset, [train_size, val_size])
     
     trainer = Trainer(
         model=model,
-        train_dataset=train_dataset,
-        val_dataset=val_dataset,
-        test_dataset=test_dataset,
+        train_dataset=train_subset,
+        val_dataset=val_subset,
+        test_dataset=eval_dataset,  # Use the eval dataset as test dataset
         batch_size=16,
         num_classes=4,
-        save_dir="./results/chb"
+        save_dir="./results/bci/"
     )
-
-    #trainer.train(epochs=100, patience=10)
-    trainer.test(model_path='results/chb/best_model.pth')
+    
+    #trainer.train(epochs=100, patience=7)
+    
+    # Test the model
+    trainer.test(model_path=os.path.join(trainer.save_dir, 'best_model.pth'))
     print(f"Training complete. Results saved to {trainer.save_dir}")
 
         

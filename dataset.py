@@ -50,7 +50,7 @@ class BCI2aDataset(BaseEEGDataset):
             raise ValueError("Mode must be either 'train' or 'eval'")
         
         self.mode = mode
-
+        
         super().__init__(data_dir, transform)
         
         self.foot_dir = os.path.join(data_dir, 'epochs_class_foot')
@@ -195,4 +195,4 @@ def inspect_dataset(dataset, name="Dataset"):
 
 
 if __name__ == "__main__":
-    bci_dataset = BCI2aDataset(data_dir='../BCICIV_2a/stage1/', mode='eval')
+    bci_dataset = BCI2aDataset(data_dir='../BCICIV_2a/stage1/', mode='train')
