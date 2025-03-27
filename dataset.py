@@ -45,17 +45,23 @@ class BaseEEGDataset(Dataset):
         return sample, label
     
 class BCI2aDataset(BaseEEGDataset):
-    def __init__(self, data_dir, transform=None):
+    def __init__(self, data_dir, mode='train', transform=None):
+        if mode not in ['train', 'eval']:
+            raise ValueError("Mode must be either 'train' or 'eval'")
+        
+        self.mode = mode
+
         super().__init__(data_dir, transform)
+        
         self.foot_dir = os.path.join(data_dir, 'epochs_class_foot')
         self.left_dir = os.path.join(data_dir, 'epochs_class_left')
         self.right_dir = os.path.join(data_dir, 'epochs_class_right')
         self.tongue_dir = os.path.join(data_dir, 'epochs_class_tongue')
 
-        foot_files = os.listdir(self.foot_dir)
-        left_files = os.listdir(self.left_dir)
-        right_files = os.listdir(self.right_dir)
-        tongue_files = os.listdir(self.tongue_dir)
+        foot_files = [f for f in os.listdir(self.foot_dir) if (mode == 'train' and 'T' in f) or (mode == 'eval' and 'E' in f)]
+        left_files = [f for f in os.listdir(self.left_dir) if (mode == 'train' and 'T' in f) or (mode == 'eval' and 'E' in f)]
+        right_files = [f for f in os.listdir(self.right_dir) if (mode == 'train' and 'T' in f) or (mode == 'eval' and 'E' in f)]
+        tongue_files = [f for f in os.listdir(self.tongue_dir) if (mode == 'train' and 'T' in f) or (mode == 'eval' and 'E' in f)]
 
         foot_epochs = self.load_epochs(foot_files, self.foot_dir)
         left_epochs = self.load_epochs(left_files, self.left_dir)
@@ -189,10 +195,4 @@ def inspect_dataset(dataset, name="Dataset"):
 
 
 if __name__ == "__main__":
-    bci_dataset = BCI2aDataset('../BCICIV_2a/stage1/')
-        # Instantiate your datasets (adjust paths)
-    chbmit_dataset = CHBMITDataset('../chbmit/stage2_dataset_no_artifacts/')
-
-    # Inspect them
-    inspect_dataset(bci_dataset, name="BCI2aDataset")
-    inspect_dataset(chbmit_dataset, name="CHBMITDataset")
+    bci_dataset = BCI2aDataset(data_dir='../BCICIV_2a/stage1/', mode='eval')

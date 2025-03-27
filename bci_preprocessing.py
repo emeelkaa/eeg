@@ -128,3 +128,4 @@ if __name__ == '__main__':
             
             output_path = os.path.join(TARGET_DIR, OUTPUT_DIRS[class_num], f"{session.replace('.gdf', '')}_class{class_num}-epo.fif")
             class_epochs.save(output_path, overwrite=True)
+            

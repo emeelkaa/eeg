@@ -160,9 +160,9 @@ class Conformer(nn.Sequential):
     def __init__(self, 
                  emb_size: int = 40, 
                  depth: int = 2, 
-                 n_classes: int = 1,
-                 input_size: Tuple[int, int, int] = (1, 18, 2560),
-                 sampling_rate: int = 256,
+                 n_classes: int = 4,
+                 input_size: Tuple[int, int, int] = (1, 22, 1126),
+                 sampling_rate: int = 250,
                  num_heads: int = 4,
     ):
         super().__init__()
@@ -178,6 +178,8 @@ class Conformer(nn.Sequential):
 
 if __name__=="__main__":
     model = Conformer()
+    params = sum(p.numel() for p in model.parameters())
+    print(params)
     x = torch.randn(1, 1, 18, 2560)  
     output = model(x)
     print(output.shape)

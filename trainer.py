@@ -154,10 +154,12 @@ class Trainer:
                 except Exception as e:
                     logging.error(f"Failed to save model: {e}")
             else:
+                '''
                 patience_counter += 1
                 if patience_counter >= patience:
                     logging.info("Early stopping triggered.")
-                    break
+                    break'''
+                pass
 
     def test(self, model_path=None):
         model_path = model_path or os.path.join(self.save_dir, "best_model.pth")
@@ -208,7 +210,7 @@ class Trainer:
         return test_metrics
 
 if __name__ == "__main__":
-    from modelbci import Conformer
+    from model import Conformer
     from dataset import BCI2aDataset
 
     dataset = BCI2aDataset("../BCICIV_2a/stage1/")
@@ -227,13 +229,13 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         val_dataset=val_dataset,
         test_dataset=test_dataset,
-        batch_size=32,
+        batch_size=16,
         num_classes=4,
         save_dir="./results/chb"
     )
 
     #trainer.train(epochs=100, patience=10)
-    trainer.test(model_path='results/bci/fold1/best_model.pth')
+    trainer.test(model_path='results/chb/best_model.pth')
     print(f"Training complete. Results saved to {trainer.save_dir}")
 
         
