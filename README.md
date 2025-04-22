@@ -4,13 +4,13 @@ This repository contains the official code for the paper:
 
 **"Multi-Scale EEG Feature Extraction with Attention Mechanism for Seizure Detection"**
 
-## 🧠 Overview
+## Overview
 
 This project implements a deep learning pipeline for seizure detection from EEG signals. The core of the model utilizes multi-scale convolutional blocks and attention mechanisms to extract informative temporal and spatial features.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 ├── preprocessing/
@@ -28,7 +28,7 @@ This project implements a deep learning pipeline for seizure detection from EEG 
 
 ---
 
-## 🔁 Workflow
+## Workflow
 
 1. **Preprocess Raw EEG Data**
    ```bash
@@ -70,6 +70,6 @@ pip install -r requirements.txt
 
 ---
 
-## 📫 Contact
+## Contact
 
 For questions or collaboration inquiries, please contact [emilkim01@pusan.ac.rk].
