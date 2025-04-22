@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F 
 from torch import nn 
 from torch import Tensor
-from typing import Tuple, Union, Optional
+from typing import Tuple
 
 from einops import rearrange
 from einops.layers.torch import Reduce
@@ -15,8 +15,7 @@ class TSception(nn.Module):
             nn.LeakyReLU(),
             nn.AvgPool2d(kernel_size=(1, pool), stride=(1, pool)),
             nn.Dropout(self.dropout_p)
-        )
-    
+        )    
     def __init__(
         self,
         emb_size: int,
@@ -123,12 +122,11 @@ class FeedForwardBlock(nn.Sequential):
         )
 
 class TransformerEncoderBlock(nn.Sequential):    
-    def __init__(self, emb_size: int, num_heads: int, drop_p: float = 0.2):
+    def __init__(self, emb_size: int, num_heads: int, drop_p: float = 0.5):
         super().__init__(
             ResidualAdd(nn.Sequential(
                 nn.LayerNorm(emb_size),
                 MultiHeadAttention(emb_size, num_heads, drop_p),
-                nn.Dropout(drop_p),
             )),
             ResidualAdd(nn.Sequential(
                 nn.LayerNorm(emb_size),
@@ -149,20 +147,21 @@ class ClassificationHead(nn.Sequential):
         self.classifier = nn.Sequential(
             Reduce('b n e -> b e', reduction='mean'),
             nn.LayerNorm(emb_size),
+            nn.Dropout(0.3),  
             nn.Linear(emb_size, n_classes)
-        )        
-
+        )   
+  
     def forward(self, x):
         out = self.classifier(x)
         return out
 
 class Conformer(nn.Sequential):
     def __init__(self, 
-                 emb_size: int = 40, 
+                 emb_size: int = 32, 
                  depth: int = 2, 
-                 n_classes: int = 4,
-                 input_size: Tuple[int, int, int] = (1, 22, 1126),
-                 sampling_rate: int = 250,
+                 n_classes: int = 1,
+                 input_size: Tuple[int, int, int] = (1, 18, 2560),
+                 sampling_rate: int = 256,
                  num_heads: int = 4,
     ):
         super().__init__()

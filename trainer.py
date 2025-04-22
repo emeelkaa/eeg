@@ -13,13 +13,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, classification_report
 
-# Optional
-#from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
-#from torch.utils.data import Subset
-
 class Trainer:
     def __init__(self, model, train_dataset, val_dataset, test_dataset, 
-                 num_classes=2, batch_size=16, learning_rate=5e-4, 
+                 num_classes, batch_size, learning_rate=1e-3, 
                  weight_decay=1e-4, device=None, save_dir="./results"):
         
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -83,24 +79,26 @@ class Trainer:
             self.optimizer.step()
 
         # Handle prediction differently for binary and multi-class
-        preds = (
-            (torch.sigmoid(outputs) > 0.5).float() if self.num_classes == 2
-            else torch.argmax(outputs, dim=1)
-        )
+        if self.num_classes == 2:
+            probs = torch.sigmoid(outputs)
+            preds = (probs > 0.5).float()
+        else:
+            probs = torch.softmax(outputs, dim=1)
+            preds = torch.argmax(outputs, dim=1)
 
         correct = (preds == labels).sum().item()
 
-        return loss.item(), correct, len(labels), preds, labels
+        return loss.item(), correct, len(labels), preds, labels, probs
 
     def _evaluate(self, dataloader, training=False):
         self.model.train() if training else self.model.eval()
 
         total_loss, total_correct, total_samples = 0, 0, 0
-        preds_list, labels_list = [], []
+        preds_list, labels_list, probs_list = [], [], []
 
         with torch.set_grad_enabled(training):
             for batch in tqdm(dataloader, desc="Training" if training else "Evaluation"):
-                loss, correct, samples, preds, labels = self._step(batch, training)
+                loss, correct, samples, preds, labels, probs = self._step(batch, training)
 
                 total_loss += loss
                 total_correct += correct
@@ -109,11 +107,12 @@ class Trainer:
                 if not training:
                     preds_list.extend(preds.cpu().numpy())
                     labels_list.extend(labels.cpu().numpy())
+                    probs_list.extend(probs.cpu().numpy())
 
         avg_loss = total_loss / len(dataloader)
         accuracy = 100 * total_correct / total_samples
 
-        return (avg_loss, accuracy, (preds_list, labels_list)) if not training else (avg_loss, accuracy, None)
+        return (avg_loss, accuracy, (preds_list, labels_list, probs_list)) 
 
     def save_history(self):
         history_path = os.path.join(self.save_dir, "history.json")
@@ -165,14 +164,14 @@ class Trainer:
         self.model.load_state_dict(torch.load(model_path))
         logging.info(f"Model loaded from {model_path} for testing.")
 
-        test_loss, test_acc, (preds, labels) = self._evaluate(self.test_loader)
+        test_loss, test_acc, (preds, labels, probs) = self._evaluate(self.val_loader)
         logging.info(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.2f}%")
 
         class_names = [f"Class {i}" for i in range(self.num_classes)]
 
         print("\nClassification Report:")
-        report = classification_report(labels, preds, target_names=class_names, output_dict=True)
-        print(classification_report(labels, preds, target_names=class_names))
+        report = classification_report(labels, preds, target_names=class_names, output_dict=True, zero_division=0)
+        print(classification_report(labels, preds, target_names=class_names, zero_division=0))
 
         cm = confusion_matrix(labels, preds)
         cm_path = os.path.join(self.save_dir, "confusion_matrix.png")
@@ -201,6 +200,70 @@ class Trainer:
             'report': report
         }
 
+        if self.num_classes == 2:
+            from sklearn.metrics import roc_curve, auc
+
+            if isinstance(probs, list):
+                probs = np.array(probs)
+
+            if len(probs.shape) > 1 and probs.shape[1] > 1:
+                y_score = probs[:, 1]
+            else:
+                y_score = probs.flatten()
+
+            # roc curve for models
+            fpr, tpr, thresholds = roc_curve(labels, y_score)
+
+            # roc curve for tpr = fpr 
+            auc_value = auc(fpr, tpr)
+            test_metrics['auc'] = float(auc_value)
+
+            # Calculate random classifier line
+            random_fpr = np.linspace(0, 1, 100)
+            random_tpr = np.linspace(0, 1, 100)
+            
+            plt.rcParams['font.family'] = 'sans-serif'
+            plt.rcParams['font.weight'] = 'normal'
+            
+            yellow = '#ffde59'  # Yellow
+            red = '#f07167'    # Red-orange
+
+            # Create ROC curve plot
+            plt.figure(figsize=(8, 6))
+
+            # Plot model ROC curve
+            plt.plot(fpr, tpr, color=yellow, linewidth=2.5, 
+                    label=f'Model (AUC = {auc_value:.4f})')
+            
+            # Plot random classifier
+            plt.plot(random_fpr, random_tpr, color=red, 
+                    label='Random Classifier (AUC = 0.5)')
+            
+            # Plot settings
+            plt.title('Receiver Operating Characteristic (ROC) Curve')
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+            plt.legend(loc='lower right', fontsize=12)
+            plt.grid(True, alpha=0.3)
+            
+            # Save the plot
+            roc_path = os.path.join(self.save_dir, "roc_curve.png")
+            plt.savefig(roc_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            logging.info(f"ROC curve saved to {roc_path}")
+            
+            # Save ROC data for further analysis
+            roc_data = {
+                'fpr': fpr.tolist(),
+                'tpr': tpr.tolist(),
+                'thresholds': thresholds.tolist(),
+                'auc': float(auc_value)
+            }
+            roc_data_path = os.path.join(self.save_dir, "roc_data.json")
+            with open(roc_data_path, "w") as f:
+                json.dump(roc_data, f, indent=4)
+            logging.info(f"ROC data saved to {roc_data_path}")
+
         metrics_path = os.path.join(self.save_dir, "test_metrics.json")
         with open(metrics_path, "w") as f:
             json.dump(test_metrics, f, indent=4)
@@ -208,74 +271,35 @@ class Trainer:
 
         return test_metrics
 
+
 if __name__ == "__main__":
     from model import Conformer
-    from dataset import BCI2aDataset
-    
+    from dataset import CHBMITDataset
+
     model = Conformer()
+    dataset = CHBMITDataset(data_dir='../chbmit/stage2_dataset_noArtifacts_10_2')
 
-    train_dataset = BCI2aDataset("../BCICIV_2a/stage1_eog/", mode='train')
-    eval_dataset = BCI2aDataset("../BCICIV_2a/stage1_eog/", mode='eval')
+    train_size = int(0.6 * len(dataset))
+    val_size = int(0.2 * len(dataset))
+    test_size = len(dataset) - train_size - val_size
 
-    # Create model
-    model = Conformer()
+    train_dataset, val_dataset, test_dataset = random_split(
+        dataset, [train_size, val_size, test_size]
+    )
 
-    # If you want to split the training data further
-    train_size = int(0.9 * len(train_dataset))
-    val_size = len(train_dataset) - train_size
-
-    train_subset, val_subset = random_split(train_dataset, [train_size, val_size])
-    
     trainer = Trainer(
         model=model,
-        train_dataset=train_subset,
-        val_dataset=val_subset,
-        test_dataset=eval_dataset,  # Use the eval dataset as test dataset
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
+        test_dataset=test_dataset,
         batch_size=16,
-        num_classes=4,
-        save_dir="./results/bci/"
+        num_classes=2, 
+        save_dir="./results/CHB/run_2"  
     )
-    
-    trainer.train(epochs=100, patience=7)
-    
+
+    #trainer.train(epochs=20, patience=5)
+        
     # Test the model
     trainer.test(model_path=os.path.join(trainer.save_dir, 'best_model.pth'))
     print(f"Training complete. Results saved to {trainer.save_dir}")
-
-        
-'''   
-Stratified Fold:  
-skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    for fold, (train_idx, temp_idx) in enumerate(skf.split(np.zeros(len(labels)), labels)):
-        print(f"\n=== Fold {fold + 1} ===")
-
-        # Split remaining data into validation and test sets
-        temp_labels = labels[temp_idx]
-
-        sss = StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=fold)
-        val_idx_relative, test_idx_relative = next(sss.split(np.zeros(len(temp_labels)), temp_labels))
-
-        val_idx = temp_idx[val_idx_relative]
-        test_idx = temp_idx[test_idx_relative]
-
-        train_dataset = Subset(dataset, train_idx)
-        val_dataset = Subset(dataset, val_idx)
-        test_dataset = Subset(dataset, test_idx)
-
-        # New model for each fold
-        model = Conformer()
-
-        trainer = Trainer(
-            model=model,
-            train_dataset=train_dataset,
-            val_dataset=val_dataset,
-            test_dataset=test_dataset,
-            batch_size=32,
-            num_classes=2,
-            save_dir=f"./results/CHB/fold{fold + 1}"
-        )
-
-        trainer.train(epochs=100, patience=5)
-        metrics = trainer.test()
-        print(f"Fold {fold + 1} complete. Accuracy: {metrics['accuracy']:.4f}")
-'''
+    
